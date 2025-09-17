@@ -1,0 +1,6 @@
+{
+  "python.defaultInterpreterPath": "./.venv/bin/python",
+  // Prefer Pyright extension for diagnostics over Pylance
+  "pyright.disableLanguageServices": false,
+  "pyright.disableDiagnostics": false
+}

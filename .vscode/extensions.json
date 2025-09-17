@@ -1,0 +1,4 @@
+{
+  "recommendations": ["ms-python.python", "ms-pyright.pyright"],
+  "unwantedRecommendations": ["ms-python.vscode-pylance"]
+}

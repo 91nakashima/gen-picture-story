@@ -1,0 +1,41 @@
+substitutions:
+  _REGION: asia-northeast1
+  _SERVICE: gen-picture-story
+  _REPO: gen-picture-story
+
+options:
+  logging: CLOUD_LOGGING_ONLY
+
+steps:
+  - name: 'gcr.io/cloud-builders/docker'
+    args:
+      [
+        'build',
+        '-t',
+        '$_REGION-docker.pkg.dev/$PROJECT_ID/$_REPO/$_SERVICE:latest',
+        '-f',
+        'infra/Dockerfile',
+        '.',
+      ]
+
+  - name: 'gcr.io/cloud-builders/docker'
+    args:
+      ['push', '$_REGION-docker.pkg.dev/$PROJECT_ID/$_REPO/$_SERVICE:latest']
+
+  - name: 'gcr.io/google.com/cloudsdktool/cloud-sdk'
+    entrypoint: gcloud
+    args:
+      - run
+      - deploy
+      - $_SERVICE
+      - --image=$_REGION-docker.pkg.dev/$PROJECT_ID/$_REPO/$_SERVICE:latest
+      - --region=$_REGION
+      - --platform=managed
+      - --allow-unauthenticated
+      - --port=8080
+      - --set-env-vars=PORT=8080
+      # Provide required envs at deploy time below or via Cloud Run console/terraform
+      # - --set-env-vars=AAP_OPENAI_API_KEY=projects/.../secrets/...:latest,GCP_SA_KEY_B64=projects/.../secrets/...:latest
+
+images:
+  - '$_REGION-docker.pkg.dev/$PROJECT_ID/$_REPO/$_SERVICE:latest'

@@ -1,0 +1,4 @@
+-r base.txt
+pytest>=7.0.0
+ruff>=0.13.0
+pyright>=1.1.379
