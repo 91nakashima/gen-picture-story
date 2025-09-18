@@ -19,6 +19,9 @@ except Exception:
 def pytest_load_initial_conftests(args, early_config, parser):
     """pytest起動直後に必ず呼ばれるフック。ここでPYTEST=1を設定する。"""
     os.environ["PYTEST"] = "1"
+    # 画像生成サービスはテスト時にオフライン許可（プレースホルダーPNG返却）を既定有効化。
+    # 実API疎通を検証したい場合のみ、環境変数 IMAGE_SERVICE_ALLOW_OFFLINE=0 を指定してください。
+    os.environ.setdefault("IMAGE_SERVICE_ALLOW_OFFLINE", "1")
 
 
 # 念のためデフォルトでも設定（フックが呼ばれない状況の保険）

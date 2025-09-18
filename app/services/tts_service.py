@@ -2,6 +2,8 @@ from __future__ import annotations
 
 import os
 from typing import Literal
+import tempfile
+from openai import OpenAI
 
 from app.config.settings import get_settings
 from app.utils.env import env_truthy
@@ -10,8 +12,6 @@ from app.utils.log import log
 
 def generate_tts(text: str, voice: str | None = None, fmt: Literal["mp3", "wav", "flac"] = "mp3") -> bytes:
     """音声を生成し、バイト列を返します（OpenAIのTTSを使用）。"""
-    import tempfile
-    from openai import OpenAI
 
     s = get_settings()
     client = OpenAI(

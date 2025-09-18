@@ -12,6 +12,7 @@ class Settings:
     model_llm: str = os.getenv("MODEL_LLM", "gpt-4o-mini")
     # 画像生成は OpenRouter 経由で Gemini を利用
     model_image: str = os.getenv("MODEL_IMAGE", "google/gemini-2.5-flash-image-preview")
+    # model_image: str = os.getenv("MODEL_IMAGE", "google/gemini-2-5-flash-image-preview:free")
     model_tts: str = os.getenv("MODEL_TTS", "gpt-4o-mini-tts")
     tts_voice: str = os.getenv("TTS_VOICE", "alloy")
 
@@ -29,12 +30,14 @@ class Settings:
 
     # OpenRouter（画像生成用）
     # AAP系と通常の環境変数の両方に対応
-    aap_openrouter_api_key: str = os.getenv("AAP_OPENROUTER_API_KEY", "")
-    openrouter_api_key: str = os.getenv("OPENROUTER_API_KEY", "")
-    openrouter_base_url: str = os.getenv("OPENROUTER_BASE_URL", "https://openrouter.ai/api/v1")
-    # 推奨ヘッダ（省略可）
-    openrouter_site_url: str | None = os.getenv("OPENROUTER_SITE_URL")
-    openrouter_app_title: str | None = os.getenv("OPENROUTER_APP_TITLE")
+    app_openrouter_api_key: str = (
+        os.getenv("AAP_OPENROUTER_API_KEY")
+        or os.getenv("OPENROUTER_API_KEY", "")
+    )
+    app_openrouter_base_url: str = (
+        os.getenv("AAP_OPENROUTER_BASE_URL")
+        or os.getenv("OPENROUTER_BASE_URL", "https://openrouter.ai/api/v1")
+    )
 
 
 def get_settings() -> Settings:

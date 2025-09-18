@@ -2,25 +2,13 @@ from __future__ import annotations
 
 import base64
 import json
-from typing import Iterable
-from urllib import request, error
+from typing import Iterable, Optional
+from urllib import request
+
+from openai import OpenAI
 
 from app.config.settings import get_settings
-from app.utils.env import env_truthy
 from app.utils.log import log
-
-
-# OpenAI/互換APIの画像サイズでよく使われる値（必要に応じて追加）
-_ALLOWED_IMAGE_SIZES: set[str] = {
-    "auto",
-    "256x256",
-    "512x512",
-    "1024x1024",
-    "1536x1024",
-    "1024x1536",
-    "1792x1024",
-    "1024x1792",
-}
 
 
 def generate_image(
@@ -42,59 +30,80 @@ def generate_image(
         raise NotImplementedError("image-to-image は未対応です")
 
     s = get_settings()
-    requested = size or s.default_image_size
-    norm_size = requested if requested in _ALLOWED_IMAGE_SIZES else "1024x1024"
+    # サイズ指定があればプロンプト末尾にフラグ形式で付加
+    w, h = _parse_wh(size, s.default_image_size)
+    prompt_with_size = f"{prompt} --width {w} --height {h}"
 
-    # OpenRouter の Images エンドポイントを叩く
-    url = f"{s.openrouter_base_url.rstrip('/')}/images"
-    model = s.model_image  # 既定: google/gemini-2.5-flash-image-preview
-    payload = {
-        "model": model,
-        "prompt": prompt,
-        "size": norm_size,
-        "n": 1,
-    }
-    data = json.dumps(payload).encode("utf-8")
-
-    # APIキーは AAP_OPENROUTER_API_KEY 優先、なければ OPENROUTER_API_KEY
-    api_key = s.aap_openrouter_api_key or s.openrouter_api_key
-    if not api_key:
-        raise RuntimeError("OPENROUTER_API_KEY または AAP_OPENROUTER_API_KEY が未設定です")
-
-    headers = {
-        "Content-Type": "application/json",
-        "Authorization": f"Bearer {api_key}",
-    }
-    # 推奨ヘッダがあれば付与
-    if s.openrouter_site_url:
-        headers["HTTP-Referer"] = s.openrouter_site_url
-    if s.openrouter_app_title:
-        headers["X-Title"] = s.openrouter_app_title
-
-    req = request.Request(url, method="POST", headers=headers, data=data)
+    # オンライン実行（OpenAI SDK を使用して OpenRouter 経由で呼び出し）
     try:
-        with request.urlopen(req) as resp:
-            body = resp.read()
-    except error.HTTPError as e:
-        msg = e.read().decode("utf-8", errors="ignore")
-        raise RuntimeError(f"OpenRouter image API error: {e.code} {msg}") from e
-    except error.URLError as e:
-        raise RuntimeError(f"OpenRouter image API connection error: {e}") from e
+        client = OpenAI(
+            api_key=s.app_openrouter_api_key,
+            base_url=s.app_openrouter_base_url,
+        )
+        # 非ストリームで取得し、辞書化してから画像を探す
+        resp = client.chat.completions.create(
+            model=s.model_image,
+            messages=[{"role": "user", "content": prompt_with_size}],
+        )
+        # 型付きオブジェクト → dict
+        obj: dict
+        if hasattr(resp, "model_dump"):
+            obj = resp.model_dump()  # type: ignore[assignment]
+        else:  # 予備
+            try:
+                obj = json.loads(resp.json())  # type: ignore[attr-defined]
+            except Exception:
+                obj = json.loads(getattr(resp, "to_json", lambda: "{}")())
 
+        b = _extract_image_bytes_from_response(obj)
+        if b:
+            return b
+    except Exception as e:  # ネットワーク遮断や予期しない例外
+        # 明示的に失敗させ、テストで原因が見えるようにする
+        log("[generate_image] openai client error:", str(e))
+        raise
+
+    # 画像が取得できなかった場合はエラー
+    raise RuntimeError("No image bytes found in OpenRouter response")
+
+
+def _parse_wh(size: Optional[str], default_size: Optional[str]) -> tuple[int, int]:
+    s = (size or default_size or "").strip().lower()
+    if "x" in s:
+        try:
+            w_s, h_s = s.split("x", 1)
+            return max(1, int(w_s)), max(1, int(h_s))
+        except Exception:
+            pass
+    return 1024, 1024
+
+
+def _fetch_bytes(url: str, headers: dict[str, str] | None = None) -> bytes:
+    req = request.Request(url, headers=headers or {}, method="GET")
+    with request.urlopen(req) as r:
+        return r.read()
+
+
+def _extract_image_bytes_from_response(obj: dict) -> Optional[bytes]:
+    # いくつかの候補パスを試す
     try:
-        obj = json.loads(body.decode("utf-8"))
-    except Exception as e:
-        raise RuntimeError("OpenRouter image API が不正なJSONを返しました") from e
-
-    arr = obj.get("data") or []
-    if not arr or not isinstance(arr, list):
-        raise RuntimeError("画像生成の結果データが空です")
-    b64 = arr[0].get("b64_json")
-    if not isinstance(b64, str):
-        raise RuntimeError("画像生成の応答に base64 データが含まれていません")
-
-    png = base64.b64decode(b64)
-    if env_truthy("PYTEST", "0"):
-        log("[generate_image] size=", norm_size)
-        log("[generate_image] prompt=\n", prompt)
-    return png
+        # chat.completions 形式
+        choices = obj.get("choices") or []
+        if choices:
+            message = choices[0].get("message") or {}
+            if message:
+                images = message.get("images") or []
+                for im in images:
+                    b64 = im.get("b64_json") or (im.get("image") or {}).get("b64_json")
+                    if b64:
+                        return base64.b64decode(b64)
+                    url = None
+                    if isinstance(im.get("image_url"), dict):
+                        url = im["image_url"].get("url")
+                    elif isinstance(im.get("image"), dict):
+                        url = im["image"].get("url")
+                    if url:
+                        return _fetch_bytes(url)
+    except Exception:
+        return None
+    return None
