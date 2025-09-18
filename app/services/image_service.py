@@ -2,7 +2,7 @@ from __future__ import annotations
 
 import base64
 import json
-from typing import Iterable, Optional
+from typing import Optional, Any, cast
 from urllib import request
 
 from openai import OpenAI
@@ -14,25 +14,44 @@ from app.utils.log import log
 def generate_image(
     prompt: str,
     size: str | None = None,
-    images: Iterable[bytes | str] | None = None,
+    images: list[bytes] | None = None,
 ) -> bytes:
-    """画像を生成してPNGのバイト列を返します（OpenRouter経由でGeminiを利用）。
+    """
+    画像を生成してPNGのバイト列を返す（OpenRouter 経由の画像モデル）。
 
     引数:
         prompt: 生成用のテキストプロンプト。
         size: 画像サイズ（例: "1024x576", "1024x1024"）。未指定時は設定値。
-        images: 参照画像。現時点では未対応。
+        images: 参照用の入力画像（最大5枚）。PNGのバイト列のリスト。
+                Chat Completions の画像入力フォーマットに合わせ、
+                data URL（data:image/png;base64, ...）として送信します。
     戻り値:
         PNG のバイト列。
     """
-    if images:
-        # 参照画像による生成は現時点では未対応
-        raise NotImplementedError("image-to-image は未対応です")
 
     s = get_settings()
     # サイズ指定があればプロンプト末尾にフラグ形式で付加
     w, h = _parse_wh(size, s.default_image_size)
     prompt_with_size = f"{prompt} --width {w} --height {h}"
+    # 日本語コメント: 参照画像がある場合は一貫性維持の明示指示を付加
+    if images:
+        prompt_with_size += " Keep character design, color palette, and illustration style consistent with the attached reference images."
+
+    # 日本語コメント: 参照画像を最大5枚まで組み立て
+    content_items: list[dict[str, Any]] = [{"type": "text", "text": prompt_with_size}]
+    if images:
+        # 直近の5枚のみ使用
+        refs: list[bytes] = list(images)[-5:]
+        for im in refs:
+            try:
+                b64 = base64.b64encode(bytes(im)).decode("ascii")
+                content_items.append({
+                    "type": "image_url",
+                    "image_url": {"url": f"data:image/png;base64,{b64}"},
+                })
+            except Exception:
+                # 個別の添付失敗はスキップ（全体は継続）
+                continue
 
     # オンライン実行（OpenAI SDK を使用して OpenRouter 経由で呼び出し）
     try:
@@ -41,10 +60,19 @@ def generate_image(
             base_url=s.app_openrouter_base_url,
         )
         # 非ストリームで取得し、辞書化してから画像を探す
-        resp = client.chat.completions.create(
-            model=s.model_image,
-            messages=[{"role": "user", "content": prompt_with_size}],
-        )
+        # 日本語コメント: 参照画像がある場合は content を配列形式で送る
+        if images:
+            # Pyright 型回避: content を配列形式にする
+            messages_any: Any = [{"role": "user", "content": content_items}]
+            resp = client.chat.completions.create(
+                model=s.model_image,
+                messages=cast(Any, messages_any),
+            )
+        else:
+            resp = client.chat.completions.create(
+                model=s.model_image,
+                messages=[{"role": "user", "content": prompt_with_size}],
+            )
         # 型付きオブジェクト → dict
         obj: dict
         if hasattr(resp, "model_dump"):

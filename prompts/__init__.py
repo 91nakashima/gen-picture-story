@@ -24,8 +24,10 @@ def split_scenes_system() -> str:
 def image_prompt_system() -> str:
     """画像プロンプト生成用のシステムプロンプトを返す。"""
     return (
-        "You turn a short Japanese scene into an image prompt for a picture book illustration. "
-        "Keep it concise."
+        "You turn a short Japanese scene into a concise, effective English image prompt for a picture book illustration. "
+        "If a style hint is present, incorporate it. "
+        "Favor concrete visual details (subjects, composition, mood, palette). "
+        "For sequential scenes, explicitly ask to keep character design and style consistent across scenes."
     )
 
 

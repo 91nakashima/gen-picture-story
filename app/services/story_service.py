@@ -45,13 +45,19 @@ def generate_from_story(story: str, max_scenes: int | None = None) -> Tuple[str,
     project = f"proj-{int(time.time())}"
     for idx, scene_text in enumerate(scenes, start=1):
         # 日本語コメント: 画像/音声生成
-        prompt = build_image_prompt(scene_text)
+        # 後続シーンでは一貫性のための指示を追加
+        style_hint = None
+        if idx > 1:
+            style_hint = "絵本風, 明るい色彩, やさしい雰囲気, 前のシーンと同一のキャラクターデザイン・配色・トーンを維持"
+        prompt = build_image_prompt(scene_text, style_hint=style_hint)
 
         # 日本語コメント: 画像生成は最大3回までリトライ
         image_bytes = b""
         for attempt in range(1, 3 + 1):
             try:
-                image_bytes = generate_image(prompt, size=s.default_image_size)
+                # 日本語コメント: 参照画像（最大5枚）で一貫性を補助
+                ref_images = images[-5:]
+                image_bytes = generate_image(prompt, size=s.default_image_size, images=ref_images if ref_images else None)
                 break
             except Exception:  # ネットワークやAPIの一過性の失敗に対応
                 if attempt >= 3:
