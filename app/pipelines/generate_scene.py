@@ -35,7 +35,7 @@ def image_from_scene_text(scene_text: str, image_size: str | None = None) -> Tup
 
     Returns a tuple of (prompt, image_bytes).
     """
-    s = get_settings()
     prompt = build_image_prompt(scene_text)
-    img_bytes = generate_image(prompt=prompt, size=image_size or s.default_image_size)
+    # 日本語コメント: デフォルトは 1024x576
+    img_bytes = generate_image(prompt=prompt, size=image_size or "1024x576")
     return prompt, img_bytes

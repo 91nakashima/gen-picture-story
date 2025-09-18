@@ -17,7 +17,8 @@ def build_ui() -> gr.Blocks:
         story = gr.Textbox(lines=8, label="物語テキスト")
 
         with gr.Row():
-            gr.Dropdown(choices=["1024x576", "1024x1024", "768x1365"], value=s.default_image_size, label="画像サイズ")
+            # 日本語コメント: デフォルトの画像サイズは 1024x576 に固定
+            gr.Dropdown(choices=["1024x576", "1024x1024", "576x1024", "1920x1080", "1080x1920"], value="1024x576", label="画像サイズ")
             gr.Textbox(value=s.tts_voice, label="TTSボイス")
 
         generate_btn = gr.Button("生成")

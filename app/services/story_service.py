@@ -1,17 +1,33 @@
 from __future__ import annotations
 
 import time
-from typing import Tuple, List
+from typing import Tuple, List, Literal
 
 from app.config.settings import get_settings
-from app.services.llm_service import split_scenes, build_image_prompt
+from app.services.llm_service import split_scenes, build_image_prompt, decide_style_hint
 from app.services.image_service import generate_image
 from app.services.tts_service import generate_tts
 from app.pipelines.compose_video import compose_scene_video, SceneMedia
 from app.utils.env import env_truthy, outputs_root
 
 
-def generate_from_story(story: str, max_scenes: int | None = None) -> Tuple[str, str, str, str]:
+ImageAspectLiteral = Literal[
+    # 横長（ランドスケープ）
+    "1024x576",
+    "1920x1080",
+    # 縦長（ポートレート）
+    "576x1024",
+    "1080x1920",
+    # 正方形
+    "1024x1024",
+]
+
+
+def generate_from_story(
+    story: str,
+    max_scenes: int | None = None,
+    image_size: ImageAspectLiteral = '1024x576',
+) -> Tuple[str, str, str, str]:
     """
     物語テキストからシーンを分割し、各シーンごとに画像と音声を生成する。
     すべてのシーンを1本のMP4動画に連結し、そのURLを返す。
@@ -19,19 +35,31 @@ def generate_from_story(story: str, max_scenes: int | None = None) -> Tuple[str,
     Params:
         story: 物語テキスト
         max_scenes: 最大シーン数（未指定時は無限扱い）
+        image_size: 画像の縦横比・解像度（リテラル）。
+            - 横長: "1024x576", "1920x1080"
+            - 縦長: "576x1024", "1080x1920"
+            - 正方形: "1024x1024"
     Returns:
         (先頭シーンの生成プロンプト, 先頭シーンの画像URL, 先頭シーンの音声URL, 単一の動画URL)
     備考:
-        - image_size と voice は設定値（settings）を使用
+        - image_size 未指定時は "1024x576" を使用。voice は設定値を使用。
         - テスト時(PYTEST=1)のみ各シーンの画像・音声をローカル保存し、先頭シーンのURLを返す
     """
+    if not story:
+        raise ValueError("story must be non-empty")
+
     s = get_settings()
+    # 日本語コメント: デフォルトは 1024x576
+    eff_img_size = image_size
 
     # シーン分割
     eff_max = max_scenes if max_scenes is not None else 9999
-    scenes = split_scenes(story or "", max_scenes=eff_max)
+    scenes = split_scenes(story, max_scenes=eff_max)
     if not scenes:
         scenes = [story or ""]
+
+    # 日本語コメント: 物語/説明文の内容に応じて、スタイルヒントを自動決定
+    style_global = decide_style_hint(story)
 
     # 各シーンのアセット生成（バイト列）
     prompts: List[str] = []
@@ -42,22 +70,26 @@ def generate_from_story(story: str, max_scenes: int | None = None) -> Tuple[str,
     img_url = ""
     aud_url = ""
 
-    project = f"proj-{int(time.time())}"
+    project = f"proj-{int(time.time())}"  # テスト用
     for idx, scene_text in enumerate(scenes, start=1):
         # 日本語コメント: 画像/音声生成
-        # 後続シーンでは一貫性のための指示を追加
-        style_hint = None
+        # スタイルはストーリーに応じて可変（ビジネス説明/絵本/アニメ等）
+        style_hint = style_global
         if idx > 1:
-            style_hint = "絵本風, 明るい色彩, やさしい雰囲気, 前のシーンと同一のキャラクターデザイン・配色・トーンを維持"
+            style_hint = f"{style_global}、前のシーンと同一のキャラクターデザイン・配色・トーンを維持"
         prompt = build_image_prompt(scene_text, style_hint=style_hint)
 
         # 日本語コメント: 画像生成は最大3回までリトライ
         image_bytes = b""
         for attempt in range(1, 3 + 1):
             try:
-                # 日本語コメント: 参照画像（最大5枚）で一貫性を補助
+                # 日本語コメント: 参照画像（最大5枚）で一貫性を補助 + 指定の縦横比で生成
                 ref_images = images[-5:]
-                image_bytes = generate_image(prompt, size=s.default_image_size, images=ref_images if ref_images else None)
+                image_bytes = generate_image(
+                    prompt,
+                    size=eff_img_size,
+                    images=ref_images if ref_images else None,
+                )
                 break
             except Exception:  # ネットワークやAPIの一過性の失敗に対応
                 if attempt >= 3:

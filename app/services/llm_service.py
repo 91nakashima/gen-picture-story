@@ -15,6 +15,7 @@ from prompts import (
     image_prompt_system,
     return_scenes_tool,
     return_scenes_tool_choice,
+    style_hint_system,
 )
 
 
@@ -116,3 +117,47 @@ def build_image_prompt(scene_text: str, style_hint: str | None = None) -> str:
     except Exception:
         # fallback: simple concatenation in English-ish
         return f"Picture book style, soft colors: {scene_text}"
+
+
+def decide_style_hint(story_text: str) -> str:
+    """
+    物語または説明文から、最適なスタイルヒント（日本語、読点区切り、1行）を決定する。
+
+    Params:
+        story_text: 元となる物語・説明文（日本語）
+    Returns:
+        スタイルヒント文字列（例: "絵本風、明るい色彩、やさしい雰囲気"）
+    """
+    s = get_settings()
+    # OpenAI クライアントは関数内で生成
+    from openai import OpenAI
+    client = OpenAI(
+        api_key=s.openai_api_key or os.getenv("OPENAI_API_KEY", ""),
+        base_url=s.openai_base_url,
+    )
+
+    system = style_hint_system()
+    user = (
+        "次の内容を読み、最適なビジュアルスタイル指示を1行だけ返してください。" \
+        "日本語、読点で区切られた短い語句列で、10〜40文字程度に収めてください。\n\n" \
+        f"本文:\n{story_text}"
+    )
+    try:
+        resp = client.chat.completions.create(
+            model=s.model_llm,
+            messages=[
+                {"role": "system", "content": system},
+                {"role": "user", "content": user},
+            ],
+            temperature=0.2,
+        )
+        content = (resp.choices[0].message.content or "").strip()
+        if env_truthy("PYTEST", "0"):
+            log("[decide_style_hint] system=\n", system)
+            log("[decide_style_hint] user=\n", user)
+            log("[decide_style_hint] result=\n", content)
+        # 余計な改行や引用符を削る
+        return content.splitlines()[0].strip("\"' ")
+    except Exception:
+        # 失敗時は保守的な既定値（絵本風）
+        return "絵本風、明るい色彩、やさしい雰囲気"

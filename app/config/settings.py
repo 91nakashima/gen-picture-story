@@ -24,7 +24,6 @@ class Settings:
     gcp_project: str | None = os.getenv("GCP_PROJECT")
 
     # App
-    default_image_size: str = os.getenv("DEFAULT_IMAGE_SIZE", "1024x576")
     output_fps: int = int(os.getenv("OUTPUT_FPS", "30"))
     signed_url_expire_seconds: int = int(os.getenv("SIGNED_URL_EXPIRE_SECONDS", "86400"))
 

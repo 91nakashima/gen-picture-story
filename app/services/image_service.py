@@ -21,7 +21,7 @@ def generate_image(
 
     引数:
         prompt: 生成用のテキストプロンプト。
-        size: 画像サイズ（例: "1024x576", "1024x1024"）。未指定時は設定値。
+        size: 画像サイズ（例: "1024x576", "1024x1024"）。未指定時は "1024x576"。
         images: 参照用の入力画像（最大5枚）。PNGのバイト列のリスト。
                 Chat Completions の画像入力フォーマットに合わせ、
                 data URL（data:image/png;base64, ...）として送信します。
@@ -31,7 +31,7 @@ def generate_image(
 
     s = get_settings()
     # サイズ指定があればプロンプト末尾にフラグ形式で付加
-    w, h = _parse_wh(size, s.default_image_size)
+    w, h = _parse_wh(size, "1024x576")
     prompt_with_size = f"{prompt} --width {w} --height {h}"
     # 日本語コメント: 参照画像がある場合は一貫性維持の明示指示を付加
     if images:

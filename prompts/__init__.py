@@ -62,3 +62,26 @@ def return_scenes_tool_choice() -> ChatCompletionNamedToolChoiceParam:
     llm_service.split_scenes から参照されます。
     """
     return {"type": "function", "function": {"name": "return_scenes"}}
+
+
+def style_hint_system() -> str:
+    """シーン全体のスタイル方針を決めるためのシステムプロンプトを返す。
+
+    目的:
+        入力された物語・説明文の内容から、映像・イラストの方向性を簡潔に指示するための
+        日本語スタイルヒント（読点区切りの短い語句列）を1行で返す。
+
+    要件:
+        - 以下の代表カテゴリを参考に、最も適切な方向性を1つに集約して表現する
+          例: 絵本風 / ビジネス向け説明動画 / アニメ風 / フォトリアル / 水彩風 / フラットデザイン
+        - ビジネス向け説明は「フラットデザイン, プロフェッショナル, 落ち着いた配色, 図表・アイコン中心」などが適合
+        - 子ども向け物語は「絵本風, 明るい色彩, やさしい雰囲気」などが適合
+        - 出力は日本語、読点区切り、余計な文は書かない
+        - シーン連続作品を想定し、キャラ・配色・トーンの一貫性が保てるような語彙を選ぶ
+    """
+    return (
+        "You are a style director for visual generation. "
+        "Read the Japanese story or explanatory text and return a single-line Japanese style hint "
+        "(short phrases separated by '、'). "
+        "Prefer concrete, high-level directives that help maintain consistency across sequential scenes."
+    )
