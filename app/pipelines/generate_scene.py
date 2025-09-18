@@ -6,17 +6,22 @@ from app.config.settings import get_settings
 from app.services.image_service import generate_image
 from app.services.tts_service import generate_tts
 from app.services.llm_service import build_image_prompt
-from app.pipelines.compose_video import compose_scene_video
+from app.pipelines.compose_video import compose_scene_video, SceneMedia
 
 
 def process_scene(image: bytes, audio: bytes) -> Dict[str, str]:
-    """Compose a single-scene video from image/audio bytes only.
-
-    - Avoids persisting image/audio; only composes a video.
-    - During tests (PYTEST=1), writes the resulting MP4 under outputs/local.
-    - Returns dict with video_path and URL (file:// when testing).
     """
-    return compose_scene_video(image=image, audio=audio)
+    画像と音声（各1本）から単一シーン動画を合成する。
+
+    備考:
+        内部では `SceneMedia(image=[image], audio=[audio])` を用いて
+        `compose_scene_video` を呼び出し、単一の辞書を返す。
+    Returns:
+        出力動画情報の辞書
+    """
+    media = SceneMedia(image=[image], audio=[audio])
+    # 日本語コメント: 単一シーンでも compose_scene_video は単一の辞書を返す
+    return compose_scene_video(media)
 
 
 def narration_from_scene_text(scene_text: str, voice: str | None = None, fmt: str = "mp3") -> bytes:

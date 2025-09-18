@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 from pathlib import Path
+from dataclasses import dataclass
 from typing import Dict
 import tempfile
 import os
@@ -47,17 +48,29 @@ def _probe_audio_duration_sec(path: str) -> float | None:
     return None
 
 
-def compose_scene_video(
-    image: bytes,
-    audio: bytes,
-) -> Dict[str, str]:
+@dataclass
+class SceneMedia:
     """
-    静止画とナレーション音声から MP4 を合成します。
+    シーン動画の入力メディア（複数）を表すデータクラス。
+
+    Params:
+        image: 画像バイト列のリスト
+        audio: 音声バイト列のリスト
+    """
+    image: list[bytes]
+    audio: list[bytes]
+
+
+def _compose_single_scene_video(image: bytes, audio: bytes) -> Dict[str, str]:
+    """
+    静止画1枚とナレーション音声1本から MP4 を1本合成する。
 
     - 画像は `-loop 1`（静止画を動画化）
     - 音声の実長を ffprobe で取得し、出力 `-t` に指定して画像と長さを完全一致
     - 解像度は 1920x1080 にフィット（scale + pad、アスペクト維持）
     - H.264 + AAC、`+faststart` でストリーミング再生向け最適化
+    Returns:
+        出力動画情報の辞書（video_path, video_url など）
     """
     s = get_settings()
     out_dir = _final_dir()
@@ -124,8 +137,8 @@ def compose_scene_video(
 
         if env_truthy("PYTEST", "0"):
             url = out_path.resolve().as_uri()
-            log("[compose_scene_video] audio_dur=", audio_dur)
-            log("[compose_scene_video] video_path=", str(out_path))
+            log("[_compose_single_scene_video] audio_dur=", audio_dur)
+            log("[_compose_single_scene_video] video_path=", str(out_path))
             return {
                 "video_gcs": "",
                 "video_url": url,
@@ -143,3 +156,83 @@ def compose_scene_video(
                 os.remove(p)
             except Exception:
                 pass
+
+
+def compose_scene_video(media: SceneMedia) -> Dict[str, str]:
+    """
+    複数の画像・音声の組を受け取り、各ペアから単一シーン動画を作成した後、
+    それらを1本のMP4に連結して返す。
+
+    Params:
+        media: `image` と `audio` に各バイト列のリストを格納したデータクラス
+
+    Returns:
+        連結後の単一動画の出力情報（video_path, video_url など）
+    """
+    # 日本語コメント: 入力ペアごとに中間動画を作成
+    segment_paths: list[str] = []
+    first_result: Dict[str, str] | None = None
+    for img, aud in zip(media.image, media.audio):
+        seg = _compose_single_scene_video(img, aud)
+        if first_result is None:
+            first_result = seg
+        segment_paths.append(seg["video_path"])
+
+    # 日本語コメント: シーンが1つだけならそのまま返す
+    if len(segment_paths) == 1:
+        # 日本語コメント: 生成結果をそのまま返す
+        return first_result or {"video_gcs": "", "video_url": segment_paths[0], "video_path": segment_paths[0]}
+
+    # 日本語コメント: 複数シーンの場合は連結して単一MP4を返す
+    return concat_videos(segment_paths)
+
+
+def concat_videos(video_paths: list[str]) -> Dict[str, str]:
+    """
+    複数の動画ファイル（同一コーデック/パラメータ前提）を1本に連結する。
+
+    - concat demuxer を使用（再エンコードなし）
+    - すべての入力動画は同一のコーデック/サンプリングであることを推奨
+    Returns:
+        連結後の動画情報（video_path, video_url など）
+    """
+    out_dir = _final_dir()
+    out_dir.mkdir(parents=True, exist_ok=True)
+    out_path = out_dir / f"concat_{int(time.time())}.mp4"
+
+    # 入力リストファイルを作成
+    list_file = tempfile.NamedTemporaryFile(prefix="concat_", suffix=".txt", mode="w", delete=False)
+    try:
+        for p in video_paths:
+            # -safe 0 を使うので絶対パスやスペースにも対応
+            list_file.write(f"file '{Path(p).resolve()}'\n")
+        list_file.flush()
+        list_file.close()
+
+        (
+            ffmpeg
+            .input(list_file.name, f="concat", safe=0)
+            .output(str(out_path), c="copy", movflags="+faststart")
+            .overwrite_output()
+            .run(quiet=False)
+        )
+
+        if env_truthy("PYTEST", "0"):
+            url = out_path.resolve().as_uri()
+            log("[concat_videos] video_path=", str(out_path))
+            return {
+                "video_gcs": "",
+                "video_url": url,
+                "video_path": str(out_path),
+            }
+        else:
+            return {
+                "video_gcs": "",
+                "video_url": str(out_path),
+                "video_path": str(out_path),
+            }
+    finally:
+        try:
+            os.remove(list_file.name)
+        except Exception:
+            pass
