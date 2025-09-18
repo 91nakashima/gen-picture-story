@@ -6,26 +6,47 @@ import gradio as gr
 
 from app.config.settings import get_settings
 from app.services.llm_service import split_scenes
-from app.pipelines.generate_scene import process_scene
+from app.services.llm_service import build_image_prompt
+from app.services.image_service import generate_image
+from app.services.tts_service import generate_tts
 from app.pipelines.compose_video import compose_scene_video
+from app.utils.env import env_truthy, outputs_root
 
 
 def _generate(project: str, story: str, max_scenes: int, image_size: str, voice: str):
+    s = get_settings()
     if not project:
         project = f"proj-{int(time.time())}"
     # Split scenes (use only the first for MVP)
     scenes = split_scenes(story or "", max_scenes=max_scenes or 1)
     scene_text = scenes[0] if scenes else (story or "")
 
-    # Generate assets
-    result = process_scene(project=project, idx=1, scene_text=scene_text, voice=voice or None, image_size=image_size or None)
-    video = compose_scene_video(project=project, idx=1, image_path=result["image_path"], audio_path=result["audio_path"]) 
+    # Generate assets (bytes)
+    prompt = build_image_prompt(scene_text)
+    image_bytes = generate_image(prompt, size=image_size or None)
+    audio_bytes = generate_tts(scene_text, voice=voice or s.tts_voice, fmt="mp3")
+
+    # For UI: write image/audio only when testing so that URLs can be displayed
+    img_url = ""
+    aud_url = ""
+    if env_truthy("PYTEST", "0"):
+        d = (outputs_root() / project / "scenes" / f"{1:04d}")
+        d.mkdir(parents=True, exist_ok=True)
+        img_path = d / "image.png"
+        aud_path = d / "narration.mp3"
+        img_path.write_bytes(image_bytes)
+        aud_path.write_bytes(audio_bytes)
+        img_url = img_path.resolve().as_uri()
+        aud_url = aud_path.resolve().as_uri()
+
+    # Compose video
+    video = compose_scene_video(image=image_bytes, audio=audio_bytes)
 
     # Outputs
     return (
-        result["prompt"],
-        result["image_url"],
-        result["audio_url"],
+        prompt,
+        img_url,
+        aud_url,
         video["video_url"],
     )
 
@@ -55,4 +76,3 @@ def build_ui() -> gr.Blocks:
         generate_btn.click(_generate, inputs=[project, story, max_scenes, image_size, voice], outputs=[prompt_out, image_url, audio_url, video_url])
 
     return demo
-

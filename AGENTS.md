@@ -22,3 +22,21 @@ pytestは、そのファイルのテストしたい関数を指定して、実�
   ```bash
   pytest -s tests/test_ファイル名.py -k "テストしたい関数名"
   ```
+
+
+# コメントについて
+コメントは、日本語で記載してください。
+## 例
+```
+def split_scenes(text: str, max_scenes: int = 5) -> List[str]:
+    """
+    LLMを用いて物語テキストを最大N個のシーンへ分割する。
+
+    Params:
+        text: 物語テキスト（日本語）
+        max_scenes: 分割するシーンの最大数
+    Returns:
+        シーンのリスト（空でないことを保証）
+    """
+    ...
+```

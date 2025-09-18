@@ -1,22 +1,22 @@
 from __future__ import annotations
 
 from pathlib import Path
-from typing import Dict, Optional
+from typing import Dict
 import tempfile
 import os
+import time
 
 import ffmpeg
 
 from app.config.settings import get_settings
-from app.storage import gcs
 from app.utils.env import env_truthy, outputs_root
 from app.utils.log import log
 
 
-def _final_dir(project: str) -> Path:
+def _final_dir() -> Path:
     """最終出力ディレクトリを返します。テスト時は repo 配下の outputs を使用。"""
     root = outputs_root() if env_truthy("PYTEST", "0") else (Path("/tmp") / "projects")
-    return root / project / "final"
+    return root / "final"
 
 
 def _probe_audio_duration_sec(path: str) -> float | None:
@@ -48,55 +48,45 @@ def _probe_audio_duration_sec(path: str) -> float | None:
 
 
 def compose_scene_video(
-    project: str,
-    idx: int,
-    image: bytes | None = None,
-    audio: bytes | None = None,
-    *,
-    image_path: str | None = None,
-    audio_path: str | None = None,
-    bucket_name: Optional[str] = None,
+    image: bytes,
+    audio: bytes,
 ) -> Dict[str, str]:
     """
     静止画とナレーション音声から MP4 を合成します。
 
-    ポイント:
     - 画像は `-loop 1`（静止画を動画化）
-    - 音声の実長を ffprobe で取得し、出力 `-t` に指定して画像の表示時間と完全一致
+    - 音声の実長を ffprobe で取得し、出力 `-t` に指定して画像と長さを完全一致
     - 解像度は 1920x1080 にフィット（scale + pad、アスペクト維持）
     - H.264 + AAC、`+faststart` でストリーミング再生向け最適化
     """
     s = get_settings()
-    out_dir = _final_dir(project)
+    out_dir = _final_dir()
     out_dir.mkdir(parents=True, exist_ok=True)
 
-    out_path = out_dir / f"scene_{idx:04d}.mp4"
+    out_path = out_dir / f"scene_{int(time.time())}.mp4"
 
-    # 入力の正規化（bytes なら一時ファイルに書き出し、パスに統一）
     created_temp_paths: list[str] = []
     try:
-        if image is not None and image_path is None:
-            img_tmp = tempfile.NamedTemporaryFile(prefix=f"img_{idx:04d}_", suffix=".png", delete=False)
-            img_tmp.write(image)
-            img_tmp.flush()
-            img_tmp.close()
-            image_path = img_tmp.name
-            created_temp_paths.append(image_path)
-        if audio is not None and audio_path is None:
-            aud_tmp = tempfile.NamedTemporaryFile(prefix=f"aud_{idx:04d}_", suffix=".mp3", delete=False)
-            aud_tmp.write(audio)
-            aud_tmp.flush()
-            aud_tmp.close()
-            audio_path = aud_tmp.name
-            created_temp_paths.append(audio_path)
+        # image を一時ファイル化
+        img_tmp = tempfile.NamedTemporaryFile(prefix="img_", suffix=".png", delete=False)
+        img_tmp.write(image)
+        img_tmp.flush()
+        img_tmp.close()
+        image_path = img_tmp.name
+        created_temp_paths.append(image_path)
 
-        if not image_path or not audio_path:
-            raise ValueError("compose_scene_video requires either bytes or path for both image and audio")
+        # audio を一時ファイル化
+        aud_tmp = tempfile.NamedTemporaryFile(prefix="aud_", suffix=".mp3", delete=False)
+        aud_tmp.write(audio)
+        aud_tmp.flush()
+        aud_tmp.close()
+        audio_path = aud_tmp.name
+        created_temp_paths.append(audio_path)
 
-        # 音声の実再生時間を取得（小数点3桁まで丸め）
+        # 音声の実再生時間
         audio_dur = _probe_audio_duration_sec(audio_path)
 
-        # 入力（画像）: ループして所定FPSでフレーム生成 → 1920x1080に整形
+        # 入力（画像）
         v_in = (
             ffmpeg
             .input(image_path, loop=1, framerate=s.output_fps)
@@ -105,38 +95,34 @@ def compose_scene_video(
             .filter("setsar", "1")
         )
 
-        # 入力（音声）: そのまま、必要に応じてサンプルレート/ビットレートを指定
-        a_in = ffmpeg.input(audio_path).audio
+        # 入力（音声）
+        a_in = ffmpeg.input(audio_path)
 
         out_kwargs: dict[str, object] = dict(
             vcodec="libx264",
             acodec="aac",
             audio_bitrate="192k",
-            ar="48000",  # 48kHz に正規化
-            ac="2",      # ステレオに正規化（再生互換性向上）
+            ar="48000",
+            ac="2",
             pix_fmt="yuv420p",
             r=s.output_fps,
             movflags="+faststart",
             video_bitrate="2000k",
         )
 
-        # 音声長が取れた場合は -t を明示指定して、画像と音声の長さを完全一致させる
         if audio_dur is not None and audio_dur > 0:
-            # ffmpeg-python の引数は文字列化して渡すのが無難
             out_kwargs["t"] = f"{audio_dur:.3f}"
         else:
-            # 取得できない場合は -shortest で音声終端に合わせて自動終了
-            out_kwargs["shortest"] = None
+            out_kwargs["shortest"] = True
 
         (
             ffmpeg
             .output(v_in, a_in, str(out_path), **out_kwargs)
             .overwrite_output()
-            .run(quiet=not env_truthy("PYTEST", "0"))
+            .run(quiet=False)  # デバッグ時は False に
         )
 
         if env_truthy("PYTEST", "0"):
-            # テスト時はローカル出力と file:// URL
             url = out_path.resolve().as_uri()
             log("[compose_scene_video] audio_dur=", audio_dur)
             log("[compose_scene_video] video_path=", str(out_path))
@@ -146,19 +132,12 @@ def compose_scene_video(
                 "video_path": str(out_path),
             }
         else:
-            # 本番は GCS へアップロード
-            gcs_path = f"projects/{project}/final/scene_{idx:04d}.mp4"
-            gcs_url = gcs.upload_file(
-                gcs_path, str(out_path), content_type="video/mp4", bucket_name=bucket_name
-            )
-            signed = gcs.signed_url(gcs_path, bucket_name=bucket_name)
             return {
-                "video_gcs": gcs_url,
-                "video_url": signed,
+                "video_gcs": "",
+                "video_url": str(out_path),
                 "video_path": str(out_path),
             }
     finally:
-        # 作成した一時ファイルをクリーンアップ
         for p in created_temp_paths:
             try:
                 os.remove(p)

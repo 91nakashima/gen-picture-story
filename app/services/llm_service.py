@@ -19,10 +19,14 @@ from prompts import (
 
 
 def split_scenes(text: str, max_scenes: int = 5) -> List[str]:
-    """LLMを用いて物語テキストを最大N個のシーンへ分割する。
+    """
+    LLMを用いて物語テキストを最大N個のシーンへ分割する。
 
-    - JSON で返すため、Chat Completions の tools（function calling）を使用。
-    - 失敗時は単一シーンとして元テキストを返す。
+    Params:
+        text: 物語テキスト（日本語）
+        max_scenes: 分割するシーンの最大数
+    Returns:
+        シーンのリスト（空でないことを保証）
     """
     s = get_settings()
     # OpenAI クライアントは関数内で生成（将来ライブラリ変更に備え局所化）

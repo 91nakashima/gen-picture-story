@@ -5,8 +5,9 @@ from pathlib import Path
 
 import pytest
 
-from app.pipelines.generate_scene import process_scene
+from app.pipelines.generate_scene import image_from_scene_text, narration_from_scene_text
 from app.pipelines.compose_video import compose_scene_video
+from app.utils.env import outputs_root
 
 
 # 日本語コメント: このテストは実際のOpenAI APIとFFmpegを使用します。
@@ -27,16 +28,19 @@ def test_process_scene_local_outputs():
     """
     require_openai_key()
     project = "pytest-demo"
-    res = process_scene(
-        project=project,
-        idx=1,
-        scene_text="静かな湖畔に小舟が浮かび、月が水面に映っている。",
-        voice=None,
-        image_size="1024x1024",
-    )
-    print("prompt:\n", res["prompt"])  # プロンプトを出力
-    assert Path(res["image_path"]).is_file()
-    assert Path(res["audio_path"]).is_file()
+    # 画像と音声を個別に生成（保存はテスト時のみ行う）
+    prompt, img_bytes = image_from_scene_text("静かな湖畔に小舟が浮かび、月が水面に映っている。", image_size="1024x1024")
+    aud_bytes = narration_from_scene_text("静かな湖畔に小舟が浮かび、月が水面に映っている。")
+
+    out_root = outputs_root() / project / "scenes" / f"{1:04d}"
+    out_root.mkdir(parents=True, exist_ok=True)
+    img_path = out_root / "image.png"
+    aud_path = out_root / "narration.mp3"
+    img_path.write_bytes(img_bytes)
+    aud_path.write_bytes(aud_bytes)
+    print("prompt:\n", prompt)  # プロンプトを出力
+    assert img_path.is_file()
+    assert aud_path.is_file()
 
 
 def test_compose_scene_video_local_outputs():
@@ -46,23 +50,20 @@ def test_compose_scene_video_local_outputs():
     """
     require_openai_key()
 
-    # まずシーンの生成を行い、画像と音声を得る（実フローに合わせる）
-    res = process_scene(
-        project="pytest-demo",
-        idx=1,
-        scene_text="静かな湖畔に小舟が浮かび、月が水面に映っている。",
-        voice=None,
-        image_size="1024x1024",
-    )
-    img_path = Path(res["image_path"]).resolve()
-    aud_path = Path(res["audio_path"]).resolve()
-    assert img_path.is_file()
-    assert aud_path.is_file()
+    # 画像と音声を個別に生成して、バイト列で動画合成
+    _, img_bytes = image_from_scene_text("静かな湖畔に小舟が浮かび、月が水面に映っている。", image_size="1024x1024")
+    aud_bytes = narration_from_scene_text("静かな湖畔に小舟が浮かび、月が水面に映っている。")
 
-    # 実際のフローに近づけるため、バイト列を渡す
-    img_bytes = img_path.read_bytes()
-    aud_bytes = aud_path.read_bytes()
+    # img_bytesを保存
+    img_path = outputs_root() / "local" / f"{1:04d}" / "image.png"
+    img_path.parent.mkdir(parents=True, exist_ok=True)
+    img_path.write_bytes(img_bytes)
 
-    video = compose_scene_video(project=project, idx=1, image=img_bytes, audio=aud_bytes)
+    # aud_bytesを保存
+    aud_path = outputs_root() / "local" / f"{1:04d}" / "narration.mp3"
+    aud_path.parent.mkdir(parents=True, exist_ok=True)
+    aud_path.write_bytes(aud_bytes)
+
+    video = compose_scene_video(image=img_bytes, audio=aud_bytes)
     print("video_path:", video["video_path"])  # 生成された動画のパス
     assert Path(video["video_path"]).is_file()
