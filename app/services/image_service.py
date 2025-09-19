@@ -33,9 +33,18 @@ def generate_image(
     # サイズ指定があればプロンプト末尾にフラグ形式で付加
     w, h = _parse_wh(size, "1024x576")
     prompt_with_size = f"{prompt} --width {w} --height {h}"
-    # 日本語コメント: 参照画像がある場合は一貫性維持の明示指示を付加
+    # 日本語コメント: 参照画像がある場合は「一貫性を保ちつつ重複を避ける」指示を付加
     if images:
-        prompt_with_size += " Keep character design, color palette, and illustration style consistent with the attached reference images."
+        prompt_with_size += (
+            " Maintain character identity, color palette, and illustration style consistent with the reference images; "
+            "however, do NOT replicate previous compositions. Create a distinct new scene: vary pose, background, camera angle, lighting, and framing. "
+            "Avoid exact repeats of layouts, backgrounds, or object arrangements."
+
+            # 日本語コメント: 参照画像がある場合は「一貫性を保ちつつ重複を避ける」指示を付加
+            # 参照画像と一貫性を保ちつつ重複を避けてください。
+            # 新しいシーンを作成してください: ポーズ、背景、カメラアングル、照明、フレーミングを変えてください。
+            # レイアウト、背景、オブジェクトの配置の正確な繰り返しは避けてください。
+        )
 
     # 日本語コメント: 参照画像を最大5枚まで組み立て
     content_items: list[dict[str, Any]] = [{"type": "text", "text": prompt_with_size}]
