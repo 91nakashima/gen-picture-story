@@ -2,7 +2,7 @@ from __future__ import annotations
 
 import base64
 import json
-from typing import Optional, Any, cast
+from typing import Optional, Any, cast, Dict, List
 from urllib import request
 
 from openai import OpenAI
@@ -83,14 +83,14 @@ def generate_image(
                 messages=[{"role": "user", "content": prompt_with_size}],
             )
         # 型付きオブジェクト → dict
-        obj: dict
+        obj: Dict[str, Any]
         if hasattr(resp, "model_dump"):
-            obj = resp.model_dump()  # type: ignore[assignment]
+            obj = cast(Dict[str, Any], resp.model_dump())  # type: ignore[assignment]
         else:  # 予備
             try:
-                obj = json.loads(resp.json())  # type: ignore[attr-defined]
+                obj = cast(Dict[str, Any], json.loads(resp.json()))  # type: ignore[attr-defined]
             except Exception:
-                obj = json.loads(getattr(resp, "to_json", lambda: "{}")())
+                obj = cast(Dict[str, Any], json.loads(getattr(resp, "to_json", lambda: "{}")()))
 
         b = _extract_image_bytes_from_response(obj)
         if b:
@@ -115,30 +115,34 @@ def _parse_wh(size: Optional[str], default_size: Optional[str]) -> tuple[int, in
     return 1024, 1024
 
 
-def _fetch_bytes(url: str, headers: dict[str, str] | None = None) -> bytes:
+def _fetch_bytes(url: str, headers: Dict[str, str] | None = None) -> bytes:
     req = request.Request(url, headers=headers or {}, method="GET")
     with request.urlopen(req) as r:
         return r.read()
 
 
-def _extract_image_bytes_from_response(obj: dict) -> Optional[bytes]:
+def _extract_image_bytes_from_response(obj: Dict[str, Any]) -> Optional[bytes]:
     # いくつかの候補パスを試す
     try:
         # chat.completions 形式
-        choices = obj.get("choices") or []
+        choices: List[Dict[str, Any]] = cast(List[Dict[str, Any]], obj.get("choices") or [])
         if choices:
-            message = choices[0].get("message") or {}
+            message: Dict[str, Any] = cast(Dict[str, Any], choices[0].get("message") or {})
             if message:
-                images = message.get("images") or []
+                images: List[Dict[str, Any]] = cast(List[Dict[str, Any]], message.get("images") or [])
                 for im in images:
-                    b64 = im.get("b64_json") or (im.get("image") or {}).get("b64_json")
-                    if b64:
-                        return base64.b64decode(b64)
-                    url = None
+                    b64_val: Optional[str] = None
+                    inner_image: Dict[str, Any] = cast(Dict[str, Any], im.get("image") or {})
+                    b64_raw: Optional[str] = cast(Optional[str], im.get("b64_json") or inner_image.get("b64_json"))
+                    if isinstance(b64_raw, str):
+                        b64_val = b64_raw
+                    if b64_val:
+                        return base64.b64decode(b64_val)
+                    url: Optional[str] = None
                     if isinstance(im.get("image_url"), dict):
-                        url = im["image_url"].get("url")
+                        url = cast(Optional[str], im["image_url"].get("url"))
                     elif isinstance(im.get("image"), dict):
-                        url = im["image"].get("url")
+                        url = cast(Optional[str], im["image"].get("url"))
                     if url:
                         return _fetch_bytes(url)
     except Exception:

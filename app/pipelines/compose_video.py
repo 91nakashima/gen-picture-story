@@ -2,12 +2,13 @@ from __future__ import annotations
 
 from pathlib import Path
 from dataclasses import dataclass
-from typing import Dict
+from typing import Dict, Any, cast
 import tempfile
 import os
 import time
 
-import ffmpeg
+import ffmpeg as _ffmpeg  # type: ignore
+ffmpeg: Any = _ffmpeg
 
 from app.config.settings import get_settings
 from app.utils.env import env_truthy, outputs_root
@@ -23,12 +24,12 @@ def _final_dir() -> Path:
 def _probe_audio_duration_sec(path: str) -> float | None:
     """ffprobe を用いて音声の長さ（秒）を取得します。取得できなければ None。"""
     try:
-        info = ffmpeg.probe(path)
+        info: Dict[str, Any] = cast(Dict[str, Any], ffmpeg.probe(path))
     except ffmpeg.Error:
         return None
 
     # format > duration が最も信頼できる
-    fmt = info.get("format") or {}
+    fmt: Dict[str, Any] = cast(Dict[str, Any], info.get("format") or {})
     dur = fmt.get("duration")
     if isinstance(dur, str):
         try:
@@ -37,7 +38,7 @@ def _probe_audio_duration_sec(path: str) -> float | None:
             pass
 
     # stream 側の duration をフォールバックで探す
-    for st in info.get("streams", []) or []:
+    for st in cast(list[Dict[str, Any]], info.get("streams", []) or []):
         if st.get("codec_type") == "audio":
             sd = st.get("duration")
             if isinstance(sd, str):
@@ -100,7 +101,7 @@ def _compose_single_scene_video(image: bytes, audio: bytes) -> Dict[str, str]:
         audio_dur = _probe_audio_duration_sec(audio_path)
 
         # 入力（画像）
-        v_in = (
+        v_in: Any = (
             ffmpeg
             .input(image_path, loop=1, framerate=s.output_fps)
             .filter("scale", "1920", "1080", force_original_aspect_ratio="decrease")
@@ -109,9 +110,9 @@ def _compose_single_scene_video(image: bytes, audio: bytes) -> Dict[str, str]:
         )
 
         # 入力（音声）
-        a_in = ffmpeg.input(audio_path)
+        a_in: Any = ffmpeg.input(audio_path)
 
-        out_kwargs: dict[str, object] = dict(
+        out_kwargs: Dict[str, object] = dict(
             vcodec="libx264",
             acodec="aac",
             audio_bitrate="192k",

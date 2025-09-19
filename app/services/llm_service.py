@@ -2,7 +2,7 @@ from __future__ import annotations
 
 import json
 import re
-from typing import List, TypedDict, Any
+from typing import List, TypedDict, Any, cast
 
 import os
 from app.config.settings import get_settings
@@ -109,28 +109,27 @@ def split_scenes(text: str, max_scenes: int = 5) -> List[SceneSpec]:
 def _ensure_scene_specs(scenes_raw: list[Any], original_text: str) -> List[SceneSpec]:
     """返却データを厳密な SceneSpec 配列へ正規化する。"""
     if not isinstance(scenes_raw, list) or not scenes_raw:
-        return [SceneSpec(text=original_text, image_hint="", voice_hint="", voice_script="", sfx_hint="")]
+        return [cast(SceneSpec, {"text": original_text, "image_hint": "", "voice_hint": "", "voice_script": "", "sfx_hint": ""})]
 
     result: list[SceneSpec] = []
     for item in scenes_raw:
         if isinstance(item, str):
             t = item.strip()
             if t:
-                result.append(SceneSpec(text=t, image_hint="",
-                              voice_hint="", voice_script="", sfx_hint=""))
+                result.append(cast(SceneSpec, {"text": t, "image_hint": "", "voice_hint": "", "voice_script": "", "sfx_hint": ""}))
             continue
         if isinstance(item, dict):
-            t = str(item.get("text", "")).strip()
+            item_dict: dict[str, Any] = cast(dict[str, Any], item)
+            t = str(item_dict.get("text", "")).strip()
             if not t:
                 t = original_text
-            image_hint = str(item.get("image_hint", "")).strip()
-            voice_hint = str(item.get("voice_hint", "")).strip()
-            voice_script = str(item.get("voice_script", "")).strip()
-            sfx_hint = str(item.get("sfx_hint", "")).strip()
-            result.append(SceneSpec(text=t, image_hint=image_hint,
-                          voice_hint=voice_hint, voice_script=voice_script, sfx_hint=sfx_hint))
+            image_hint = str(item_dict.get("image_hint", "")).strip()
+            voice_hint = str(item_dict.get("voice_hint", "")).strip()
+            voice_script = str(item_dict.get("voice_script", "")).strip()
+            sfx_hint = str(item_dict.get("sfx_hint", "")).strip()
+            result.append(cast(SceneSpec, {"text": t, "image_hint": image_hint, "voice_hint": voice_hint, "voice_script": voice_script, "sfx_hint": sfx_hint}))
 
-    return result or [SceneSpec(text=original_text, image_hint="", voice_hint="", voice_script="", sfx_hint="")]
+    return result or [cast(SceneSpec, {"text": original_text, "image_hint": "", "voice_hint": "", "voice_script": "", "sfx_hint": ""})]
 
 
 def build_image_prompt(scene_text: str, style_hint: str | None = None) -> str:

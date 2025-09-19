@@ -6,8 +6,9 @@ from functools import lru_cache
 from datetime import timedelta
 from typing import Optional
 
-from google.cloud import storage
-from google.oauth2 import service_account
+from typing import Any, cast
+from google.cloud import storage  # type: ignore
+from google.oauth2 import service_account  # type: ignore
 
 from app.config.settings import get_settings
 
@@ -23,9 +24,9 @@ def _client() -> storage.Client:
     if s.gcp_sa_key_b64:
         try:
             raw = base64.b64decode(s.gcp_sa_key_b64)
-            info = json.loads(raw.decode("utf-8"))
+            info = cast(dict[str, Any], json.loads(raw.decode("utf-8")))
             creds = service_account.Credentials.from_service_account_info(info)
-            project = s.gcp_project or info.get("project_id")
+            project = cast(str | None, s.gcp_project or info.get("project_id"))
             return storage.Client(project=project, credentials=creds)
         except Exception as e:
             raise RuntimeError("Failed to load GCP service account from GCP_SA_KEY_B64") from e
