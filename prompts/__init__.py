@@ -40,14 +40,39 @@ def return_scenes_tool() -> ChatCompletionFunctionToolParam:
         "type": "function",
         "function": {
             "name": "return_scenes",
-            "description": "物語を分割したシーン配列を返す",
+            "description": "物語を分割したシーンの配列を返す（各シーンに画像/音声/効果音のヒントと、実際に読み上げるセリフを含む）",
             "parameters": {
                 "type": "object",
                 "properties": {
                     "scenes": {
                         "type": "array",
-                        "items": {"type": "string"},
-                        "description": "各シーンのテキスト配列",
+                        "description": "各シーンの仕様配列",
+                        "items": {
+                            "type": "object",
+                            "properties": {
+                                "text": {
+                                    "type": "string",
+                                    "description": "シーン本文（日本語、簡潔）",
+                                },
+                                "image_hint": {
+                                    "type": "string",
+                                    "description": "どんな画像（または動画カット）が良いかのヒント（構図・被写体・スタイル等）",
+                                },
+                                "voice_hint": {
+                                    "type": "string",
+                                    "description": "ナレーションのスタイルヒント（話者性別/トーン/テンポ/言語など）。実際のセリフは voice_script に記載。",
+                                },
+                                "voice_script": {
+                                    "type": "string",
+                                    "description": "実際に読み上げるセリフ（基本的に、背景説明・心情描写やSFX/BGM指示は含めない）",
+                                },
+                                "sfx_hint": {
+                                    "type": "string",
+                                    "description": "どんな効果音が良いか（将来用途、現状では使用しない）",
+                                },
+                            },
+                            "required": ["text", "image_hint", "voice_hint", "voice_script", "sfx_hint"],
+                        },
                     }
                 },
                 "required": ["scenes"],
@@ -84,4 +109,14 @@ def style_hint_system() -> str:
         "Read the Japanese story or explanatory text and return a single-line Japanese style hint "
         "(short phrases separated by '、'). "
         "Prefer concrete, high-level directives that help maintain consistency across sequential scenes."
+    )
+
+
+def voice_script_system() -> str:
+    """TTS向けの日本語セリフ専用システムプロンプト（背景や心情の説明は禁止）。"""
+    return (
+        "You produce only spoken lines in Japanese suitable for TTS. "
+        "Do NOT include visual descriptions, background, camera directions, emotions as labels, SFX/BGM notes, or stage directions. "
+        "If the scene has dialogue, output polished dialogue lines only. If not, write 1–2 short narrator sentences that could be spoken aloud. "
+        "No prefixes like 'ナレーション:' or character names unless strictly needed; avoid quotes and brackets. Keep it concise and readable."
     )

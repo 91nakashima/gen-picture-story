@@ -4,7 +4,13 @@ import time
 from typing import Tuple, List, Literal
 
 from app.config.settings import get_settings
-from app.services.llm_service import split_scenes, build_image_prompt, decide_style_hint
+from app.services.llm_service import (
+    split_scenes,
+    build_image_prompt,
+    decide_style_hint,
+    build_voice_script,
+    SceneSpec,
+)
 from app.services.image_service import generate_image
 from app.services.tts_service import generate_tts
 from app.pipelines.compose_video import compose_scene_video, SceneMedia
@@ -54,9 +60,12 @@ def generate_from_story(
 
     # シーン分割
     eff_max = max_scenes if max_scenes is not None else 9999
-    scenes = split_scenes(story, max_scenes=eff_max)
-    if not scenes:
-        scenes = [story or ""]
+    scene_specs = split_scenes(story, max_scenes=eff_max)
+    if not scene_specs:
+        scene_specs = [SceneSpec(text=story or "", image_hint="", voice_hint="", voice_script="", sfx_hint="")]
+
+    if env_truthy("PYTEST", "0"):
+        print(scene_specs)
 
     # 日本語コメント: 物語/説明文の内容に応じて、スタイルヒントを自動決定
     style_global = decide_style_hint(story)
@@ -71,12 +80,16 @@ def generate_from_story(
     aud_url = ""
 
     project = f"proj-{int(time.time())}"  # テスト用
-    for idx, scene_text in enumerate(scenes, start=1):
+    for idx, spec in enumerate(scene_specs, start=1):
+        scene_text = spec["text"]
         # 日本語コメント: 画像/音声生成
         # スタイルはストーリーに応じて可変（ビジネス説明/絵本/アニメ等）
         style_hint = style_global
+        # 日本語コメント: シーン固有の画像ヒントを補助的に付与
+        if spec.get("image_hint"):
+            style_hint = f"{style_global}、{spec['image_hint']}"
         if idx > 1:
-            style_hint = f"{style_global}、前のシーンと同一のキャラクターデザイン・配色・トーンを維持"
+            style_hint = f"{style_hint}、前のシーンと同一のキャラクターデザイン・配色・トーンを維持"
         prompt = build_image_prompt(scene_text, style_hint=style_hint)
 
         # 日本語コメント: 画像生成は最大3回までリトライ
@@ -98,9 +111,14 @@ def generate_from_story(
 
         # 日本語コメント: 音声生成は最大3回までリトライ
         audio_bytes = b""
+        # シーンで用意された実際のセリフを優先。なければヒントを用いてセリフを生成。
+        voice_text = (
+            spec.get("voice_script")
+            or build_voice_script(scene_text, spec.get("voice_hint") or None)
+        )
         for attempt in range(1, 3 + 1):
             try:
-                audio_bytes = generate_tts(scene_text, voice=s.tts_voice, fmt="mp3")
+                audio_bytes = generate_tts(voice_text, voice=s.tts_voice, fmt="mp3")
                 break
             except Exception:
                 if attempt >= 3:
