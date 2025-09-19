@@ -58,7 +58,10 @@ def split_scenes(text: str, max_scenes: int = 5) -> List[SceneSpec]:
         f"以下の日本語テキストを、自然なまとまりで最大{max_scenes}個に分割してください。"
         "各シーンには、本文(text)、画像のヒント(image_hint)、ナレーションのスタイルヒント(voice_hint)、"
         "実際に読み上げるセリフ(voice_script)、効果音のヒント(sfx_hint)を含めてください。"
-        "voice_script は日本語で1〜3文、背景説明や心情の解説、SFX/BGM指示を含めないでください。"
+        "voice_script は日本語で1〜3文。背景説明・心情解説・SFX/BGM・カメラ指示は含めないでください。"
+        "特に重要: すべての voice_script を先頭から順に連結しても、不自然な繰り返し（例:『私は〜です。私は〜です。』の連続）にならないように、"
+        "前の内容を前提とした代名詞や接続表現を使って、文脈が自然につながるように書いてください。"
+        "無理にシーンを区切って、句点ですぐに終わるようにしないでください。"
         "返答は用意された関数を必ず呼び出してください。\n\n"
         f"テキスト:\n{text}"
     )
@@ -113,7 +116,8 @@ def _ensure_scene_specs(scenes_raw: list[Any], original_text: str) -> List[Scene
         if isinstance(item, str):
             t = item.strip()
             if t:
-                result.append(SceneSpec(text=t, image_hint="", voice_hint="", voice_script="", sfx_hint=""))
+                result.append(SceneSpec(text=t, image_hint="",
+                              voice_hint="", voice_script="", sfx_hint=""))
             continue
         if isinstance(item, dict):
             t = str(item.get("text", "")).strip()
@@ -123,7 +127,8 @@ def _ensure_scene_specs(scenes_raw: list[Any], original_text: str) -> List[Scene
             voice_hint = str(item.get("voice_hint", "")).strip()
             voice_script = str(item.get("voice_script", "")).strip()
             sfx_hint = str(item.get("sfx_hint", "")).strip()
-            result.append(SceneSpec(text=t, image_hint=image_hint, voice_hint=voice_hint, voice_script=voice_script, sfx_hint=sfx_hint))
+            result.append(SceneSpec(text=t, image_hint=image_hint,
+                          voice_hint=voice_hint, voice_script=voice_script, sfx_hint=sfx_hint))
 
     return result or [SceneSpec(text=original_text, image_hint="", voice_hint="", voice_script="", sfx_hint="")]
 
@@ -180,8 +185,8 @@ def decide_style_hint(story_text: str) -> str:
 
     system = style_hint_system()
     user = (
-        "次の内容を読み、最適なビジュアルスタイル指示を1行だけ返してください。" \
-        "日本語、読点で区切られた短い語句列で、10〜40文字程度に収めてください。\n\n" \
+        "次の内容を読み、最適なビジュアルスタイル指示を1行だけ返してください。"
+        "日本語、読点で区切られた短い語句列で、10〜40文字程度に収めてください。\n\n"
         f"本文:\n{story_text}"
     )
     try:
@@ -225,9 +230,9 @@ def build_voice_script(scene_text: str, voice_hint: str | None = None) -> str:
     system = voice_script_system()
     hint = (voice_hint or "").strip() or "ナレーション: 丁寧でわかりやすく、ゆっくりめ"
     user = (
-        "以下のシーンから、TTS向けに『話すべきセリフ/ナレーションのみ』を短く作成してください。"\
-        "背景説明・心情解説・カメラ指示・効果音指示は含めないでください。"\
-        "引用符や括弧、ラベル（例: ナレーション:, BGM:, SFX:）も不要です。"\
+        "以下のシーンから、TTS向けに『話すべきセリフ/ナレーションのみ』を短く作成してください。"
+        "背景説明・心情解説・カメラ指示・効果音指示は含めないでください。"
+        "引用符や括弧、ラベル（例: ナレーション:, BGM:, SFX:）も不要です。"
         "\n\nシーン:\n" + scene_text +
         "\n\n音声スタイル指示: " + hint +
         "\n\n出力は読み上げやすい日本語の短い文（1〜2文）だけを返してください。"
@@ -272,7 +277,8 @@ def _sanitize_voice_script(text: str) -> str:
     # 行単位の前置ラベル除去
     lines = [ln.strip() for ln in s.splitlines() if ln.strip()]
     cleaned_lines: list[str] = []
-    label_re = re.compile(r"^(ナレーション|Narrator|BGM|SFX|SE|効果音|カメラ|Scene|シーン)\s*[:：]\s*", re.IGNORECASE)
+    label_re = re.compile(
+        r"^(ナレーション|Narrator|BGM|SFX|SE|効果音|カメラ|Scene|シーン)\s*[:：]\s*", re.IGNORECASE)
     visual_prefix_re = re.compile(r"^(背景|画面|映像|シーン)\s*[:：]", re.IGNORECASE)
     for ln in lines:
         ln = label_re.sub("", ln)

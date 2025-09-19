@@ -14,10 +14,13 @@ from openai.types.chat import (
 
 
 def split_scenes_system() -> str:
-    """物語分割用のシステムプロンプトを返す。"""
+    """物語分割用のシステムプロンプトを返す。連続再生時の自然さを重視。"""
     return (
-        "You split a Japanese children story into concise scene chunks. "
-        "Return results by calling the provided function with an array of scene texts."
+        "You act as a storyboarder and narration writer for a Japanese story or explainer. "
+        "Split the input into concise, coherent scene chunks and provide fields for each scene. "
+        "Crucially, the voice_script fields, when concatenated in order, must form a smooth, natural narration without redundant restatements. "
+        "Avoid per‑scene reintroductions (e.g., repeating '私は〜です。' at every scene). "
+        "Maintain consistent perspective, pronouns, and tense. Use connective devices to ensure flow between scenes."
     )
 
 
