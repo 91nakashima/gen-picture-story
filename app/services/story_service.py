@@ -33,6 +33,10 @@ ImageAspectLiteral = Literal[
 ]
 
 
+# 日本語コメント: HTTP参照画像の取得に利用するタイムアウト（秒）
+DEFAULT_HTTP_TIMEOUT = 5.0
+
+
 @dataclass(slots=True)
 class StoryGenerationOptions:
     """物語生成パイプラインの拡張設定。"""
@@ -68,7 +72,7 @@ def _collect_reference_images(options: StoryGenerationOptions) -> List[bytes]:
             continue
         try:
             req = Request(url, method="GET")
-            with urlopen(req) as resp:
+            with urlopen(req, timeout=DEFAULT_HTTP_TIMEOUT) as resp:
                 data = resp.read()
         except Exception:
             continue

@@ -15,9 +15,8 @@ ffmpeg: Any = _ffmpeg
 
 
 def _final_dir() -> Path:
-    """最終出力ディレクトリを返します。テスト時は repo 配下の outputs を使用。"""
-    root = outputs_root() if env_truthy("PYTEST", "0") else (Path("/tmp") / "projects")
-    return root / "final"
+    """最終出力ディレクトリを返します。`outputs_root` 配下に統一。"""
+    return outputs_root() / "final"
 
 
 def _probe_audio_duration_sec(path: str) -> float | None:
