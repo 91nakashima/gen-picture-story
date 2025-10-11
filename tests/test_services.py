@@ -25,13 +25,17 @@ def require_openai_key() -> None:
     どちらも未設定の場合にスキップします。
     """
     if not (os.getenv("AAP_OPENAI_API_KEY") or os.getenv("OPENROUTER_API_KEY")):
-        pytest.skip("AAP_OPENAI_API_KEY または OPENROUTER_API_KEY が未設定のためスキップ")
+        pytest.skip(
+            "AAP_OPENAI_API_KEY または OPENROUTER_API_KEY が未設定のためスキップ"
+        )
 
 
 def require_image_key() -> None:
     """画像生成に必要な OpenRouter の API キーを確認します。未設定ならスキップ。"""
     if not (os.getenv("OPENROUTER_API_KEY") or os.getenv("AAP_OPENROUTER_API_KEY")):
-        pytest.skip("OPENROUTER_API_KEY または AAP_OPENROUTER_API_KEY が未設定のためスキップ")
+        pytest.skip(
+            "OPENROUTER_API_KEY または AAP_OPENROUTER_API_KEY が未設定のためスキップ"
+        )
 
 
 def test_split_scenes_real():
@@ -70,7 +74,9 @@ def test_generate_image_real():
     require_image_key()
     out_dir = outputs_root()
     out = out_dir / "test_image.png"
-    img = generate_image("A vivid red apple on a white table, soft light", size="1024x1024")
+    img = generate_image(
+        "A vivid red apple on a white table, soft light", size="1024x1024"
+    )
     out.write_bytes(img)
     print("image path:", str(out))
     assert out.is_file() and out.stat().st_size > 0
@@ -84,7 +90,11 @@ def test_generate_tts_real(test_env, tmp_path: Path):
     require_openai_key()
     out_dir = outputs_root()
     out = out_dir / "test_audio.mp3"
-    audio = generate_tts("こんにちは。これはテスト音声です。落ち着いた声で読み上げてください。", voice=None, fmt="mp3")
+    audio = generate_tts(
+        "こんにちは。これはテスト音声です。落ち着いた声で読み上げてください。",
+        voice=None,
+        fmt="mp3",
+    )
     out.write_bytes(audio)
     print("audio path:", str(out))
     assert out.is_file() and out.stat().st_size > 0

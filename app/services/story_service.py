@@ -32,7 +32,7 @@ ImageAspectLiteral = Literal[
 def generate_from_story(
     story: str,
     max_scenes: int | None = None,
-    image_size: ImageAspectLiteral = '1024x576',
+    image_size: ImageAspectLiteral = "1024x576",
 ) -> Tuple[str, str, str, str]:
     """
     物語テキストからシーンを分割し、各シーンごとに画像と音声を生成する。
@@ -62,7 +62,15 @@ def generate_from_story(
     eff_max = max_scenes if max_scenes is not None else 9999
     scene_specs = split_scenes(story, max_scenes=eff_max)
     if not scene_specs:
-        scene_specs = [SceneSpec(text=story or "", image_hint="", voice_hint="", voice_script="", sfx_hint="")]
+        scene_specs = [
+            SceneSpec(
+                text=story or "",
+                image_hint="",
+                voice_hint="",
+                voice_script="",
+                sfx_hint="",
+            )
+        ]
 
     if env_truthy("PYTEST", "0"):
         print(scene_specs)
@@ -112,9 +120,8 @@ def generate_from_story(
         # 日本語コメント: 音声生成は最大3回までリトライ
         audio_bytes = b""
         # シーンで用意された実際のセリフを優先。なければヒントを用いてセリフを生成。
-        voice_text = (
-            spec.get("voice_script")
-            or build_voice_script(scene_text, spec.get("voice_hint") or None)
+        voice_text = spec.get("voice_script") or build_voice_script(
+            scene_text, spec.get("voice_hint") or None
         )
         for attempt in range(1, 3 + 1):
             try:
@@ -131,7 +138,7 @@ def generate_from_story(
 
         # 日本語コメント: テスト時のみ、各シーンの画像/音声を書き出してURLを作成
         if env_truthy("PYTEST", "0"):
-            d = (outputs_root() / project / "scenes" / f"{idx:04d}")
+            d = outputs_root() / project / "scenes" / f"{idx:04d}"
             d.mkdir(parents=True, exist_ok=True)
             img_path = d / "image.png"
             aud_path = d / "narration.mp3"

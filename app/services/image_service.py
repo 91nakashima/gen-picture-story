@@ -38,12 +38,7 @@ def generate_image(
         prompt_with_size += (
             " Maintain character identity, color palette, and illustration style consistent with the reference images; "
             "however, do NOT replicate previous compositions. Create a distinct new scene: vary pose, background, camera angle, lighting, and framing. "
-            "Avoid exact repeats of layouts, backgrounds, or object arrangements."
-
-            # 日本語コメント: 参照画像がある場合は「一貫性を保ちつつ重複を避ける」指示を付加
-            # 参照画像と一貫性を保ちつつ重複を避けてください。
-            # 新しいシーンを作成してください: ポーズ、背景、カメラアングル、照明、フレーミングを変えてください。
-            # レイアウト、背景、オブジェクトの配置の正確な繰り返しは避けてください。
+            " Avoid exact repeats of layouts, backgrounds, or object arrangements."
         )
 
     # 日本語コメント: 参照画像を最大5枚まで組み立て
@@ -129,11 +124,13 @@ def _extract_image_bytes_from_response(obj: Dict[str, Any]) -> Optional[bytes]:
         if choices:
             message: Dict[str, Any] = cast(Dict[str, Any], choices[0].get("message") or {})
             if message:
-                images: List[Dict[str, Any]] = cast(List[Dict[str, Any]], message.get("images") or [])
+                images: List[Dict[str, Any]] = cast(
+                    List[Dict[str, Any]], message.get("images") or [])
                 for im in images:
                     b64_val: Optional[str] = None
                     inner_image: Dict[str, Any] = cast(Dict[str, Any], im.get("image") or {})
-                    b64_raw: Optional[str] = cast(Optional[str], im.get("b64_json") or inner_image.get("b64_json"))
+                    b64_raw: Optional[str] = cast(Optional[str], im.get(
+                        "b64_json") or inner_image.get("b64_json"))
                     if isinstance(b64_raw, str):
                         b64_val = b64_raw
                     if b64_val:

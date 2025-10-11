@@ -13,12 +13,14 @@ def main():
     share = env_truthy("GRADIO_SHARE", "0")
     demo = build_ui()
     # Use queue to limit concurrency for heavy tasks
+    prevent_thread_lock = env_truthy("GRADIO_PREVENT_THREAD_LOCK", "0")
     demo.queue(max_size=16).launch(
         server_name="0.0.0.0",
         server_port=port,
         show_api=False,
-        prevent_thread_lock=True,
-        share=share
+        # 日本語コメント: デフォルトではプロセスをブロックさせるため False を設定し、必要に応じて環境変数で切り替え可能
+        prevent_thread_lock=prevent_thread_lock,
+        share=share,
     )
 
 

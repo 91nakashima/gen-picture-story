@@ -5,7 +5,10 @@ from pathlib import Path
 
 import pytest
 
-from app.pipelines.generate_scene import image_from_scene_text, narration_from_scene_text
+from app.pipelines.generate_scene import (
+    image_from_scene_text,
+    narration_from_scene_text,
+)
 from app.pipelines.compose_video import compose_scene_video, SceneMedia
 from app.utils.env import outputs_root
 
@@ -28,8 +31,12 @@ def test_process_scene_local_outputs():
     """
     require_openai_key()
     # 画像と音声を個別に生成（保存はテスト時のみ行う）
-    prompt, img_bytes = image_from_scene_text("静かな湖畔に小舟が浮かび、月が水面に映っている。", image_size="1024x1024")
-    aud_bytes = narration_from_scene_text("静かな湖畔に小舟が浮かび、月が水面に映っている。")
+    prompt, img_bytes = image_from_scene_text(
+        "静かな湖畔に小舟が浮かび、月が水面に映っている。", image_size="1024x1024"
+    )
+    aud_bytes = narration_from_scene_text(
+        "静かな湖畔に小舟が浮かび、月が水面に映っている。"
+    )
 
     out_root = outputs_root() / "scenes" / f"{1:04d}"
     out_root.mkdir(parents=True, exist_ok=True)
@@ -50,8 +57,12 @@ def test_compose_scene_video_local_outputs():
     require_openai_key()
 
     # 画像と音声を個別に生成して、バイト列で動画合成
-    _, img_bytes = image_from_scene_text("静かな湖畔に小舟が浮かび、月が水面に映っている。", image_size="1024x1024")
-    aud_bytes = narration_from_scene_text("静かな湖畔に小舟が浮かび、月が水面に映っている。")
+    _, img_bytes = image_from_scene_text(
+        "静かな湖畔に小舟が浮かび、月が水面に映っている。", image_size="1024x1024"
+    )
+    aud_bytes = narration_from_scene_text(
+        "静かな湖畔に小舟が浮かび、月が水面に映っている。"
+    )
 
     # img_bytesを保存
     img_path = outputs_root() / "local" / f"{1:04d}" / "image.png"

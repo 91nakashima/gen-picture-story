@@ -9,7 +9,9 @@ from app.utils.env import outputs_root
 try:
     from dotenv import load_dotenv, find_dotenv
 
-    _env_path = find_dotenv(filename=".env", raise_error_if_not_found=False, usecwd=True)
+    _env_path = find_dotenv(
+        filename=".env", raise_error_if_not_found=False, usecwd=True
+    )
     if _env_path:
         load_dotenv(_env_path, override=False)
 except Exception:

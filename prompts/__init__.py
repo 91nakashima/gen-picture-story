@@ -74,7 +74,13 @@ def return_scenes_tool() -> ChatCompletionFunctionToolParam:
                                     "description": "どんな効果音が良いか（将来用途、現状では使用しない）",
                                 },
                             },
-                            "required": ["text", "image_hint", "voice_hint", "voice_script", "sfx_hint"],
+                            "required": [
+                                "text",
+                                "image_hint",
+                                "voice_hint",
+                                "voice_script",
+                                "sfx_hint",
+                            ],
                         },
                     }
                 },

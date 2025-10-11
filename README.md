@@ -69,6 +69,7 @@ Cloud Run デプロイ（Cloud Build）
 - `MODEL_IMAGE`（既定: google/gemini-2.5-flash-image-preview）
 - `MODEL_TTS`（既定: gpt-4o-mini-tts）
 - `GRADIO_SHARE`（既定: 0／共有リンク無効。1 で有効）
+- `GRADIO_PREVENT_THREAD_LOCK`（既定: 0／CLI 実行時にプロセスをブロック。1 で非ブロッキング起動）
 
 テスト実行（統合テスト・実サービス利用）
 - このリポジトリのテストはモックを使わず、実際にOpenAI APIやFFmpegを使用します。

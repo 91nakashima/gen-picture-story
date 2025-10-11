@@ -22,4 +22,3 @@ def outputs_root() -> Path:
         p.mkdir(parents=True, exist_ok=True)
         return p
     return Path("/tmp") / "projects"
-

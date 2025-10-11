@@ -1,4 +1,7 @@
 from __future__ import annotations
+from app.utils.log import log
+from app.utils.env import env_truthy, outputs_root
+from app.config.settings import get_settings
 
 from pathlib import Path
 from dataclasses import dataclass
@@ -9,10 +12,6 @@ import time
 
 import ffmpeg as _ffmpeg  # type: ignore
 ffmpeg: Any = _ffmpeg
-
-from app.config.settings import get_settings
-from app.utils.env import env_truthy, outputs_root
-from app.utils.log import log
 
 
 def _final_dir() -> Path:
