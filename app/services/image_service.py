@@ -14,7 +14,8 @@ from app.utils.log import log
 def generate_image(
     prompt: str,
     size: str | None = None,
-    images: list[bytes] | None = None,
+    base_images: list[bytes] | None = None,
+    scene_images: list[bytes] | None = None,
 ) -> bytes:
     """
     画像を生成してPNGのバイト列を返す（OpenRouter 経由の画像モデル）。
@@ -22,9 +23,9 @@ def generate_image(
     引数:
         prompt: 生成用のテキストプロンプト。
         size: 画像サイズ（例: "1024x576", "1024x1024"）。未指定時は "1024x576"。
-        images: 参照用の入力画像（最大5枚）。PNGのバイト列のリスト。
-                Chat Completions の画像入力フォーマットに合わせ、
-                data URL（data:image/png;base64, ...）として送信します。
+        base_images: 全シーン共通の参照画像（最大5枚）。
+        scene_images: 直近シーンの参照画像（最大5枚）。
+            いずれも PNG バイト列で、Chat Completions の画像入力として data URL 化して送信。
     戻り値:
         PNG のバイト列。
     """
@@ -32,20 +33,30 @@ def generate_image(
     s = get_settings()
     # サイズ指定があればプロンプト末尾にフラグ形式で付加
     w, h = _parse_wh(size, "1024x576")
+    guidance_parts: list[str] = []
     prompt_with_size = f"{prompt} --width {w} --height {h}"
-    # 日本語コメント: 参照画像がある場合は「一貫性を保ちつつ重複を避ける」指示を付加
-    if images:
-        prompt_with_size += (
-            " Maintain character identity, color palette, and illustration style consistent with the reference images; "
-            "however, do NOT replicate previous compositions. Create a distinct new scene: vary pose, background, camera angle, lighting, and framing. "
-            " Avoid exact repeats of layouts, backgrounds, or object arrangements."
+
+    combined_images: list[bytes] = []
+    if base_images:
+        combined_images.extend(base_images)
+        guidance_parts.append(
+            # 日本語訳: 基本参照画像と一貫性のあるキャラクターのアイデンティティ、衣装、全体的なビジュアルスタイルを維持する。
+            "Maintain character identity, costumes, and overarching visual style consistent with the base reference images."
         )
+    if scene_images:
+        combined_images.extend(scene_images)
+        guidance_parts.append(
+            # 日本語訳: 直近のシーン参照画像と一貫性を保ちつつ、ポーズ、カメラアングル、背景、照明を変化させた新しい構図を作成する。
+            "Ensure continuity with the most recent scene references but craft a new composition with varied pose, camera angle, background, and lighting."
+        )
+
+    if combined_images:
+        prompt_with_size += " " + " ".join(guidance_parts)
 
     # 日本語コメント: 参照画像を最大5枚まで組み立て
     content_items: list[dict[str, Any]] = [{"type": "text", "text": prompt_with_size}]
-    if images:
-        # 直近の5枚のみ使用
-        refs: list[bytes] = list(images)[-5:]
+    if combined_images:
+        refs: list[bytes] = list(combined_images)[-5:]
         for im in refs:
             try:
                 b64 = base64.b64encode(bytes(im)).decode("ascii")
@@ -65,7 +76,7 @@ def generate_image(
         )
         # 非ストリームで取得し、辞書化してから画像を探す
         # 日本語コメント: 参照画像がある場合は content を配列形式で送る
-        if images:
+        if combined_images:
             # Pyright 型回避: content を配列形式にする
             messages_any: Any = [{"role": "user", "content": content_items}]
             resp = client.chat.completions.create(

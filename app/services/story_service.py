@@ -1,7 +1,11 @@
 from __future__ import annotations
 
 import time
+from collections.abc import Sequence
+from dataclasses import dataclass
+from pathlib import Path
 from typing import Tuple, List, Literal
+from urllib.request import Request, urlopen
 
 from app.config.settings import get_settings
 from app.services.llm_service import (
@@ -29,10 +33,56 @@ ImageAspectLiteral = Literal[
 ]
 
 
+@dataclass(slots=True)
+class StoryGenerationOptions:
+    """物語生成パイプラインの拡張設定。"""
+
+    reference_images: Sequence[bytes] = ()
+    local_images: Sequence[str] = ()
+    http_images: Sequence[str] = ()
+
+    def iter_reference_images(self) -> Sequence[bytes]:
+        return self.reference_images
+
+
+def _collect_reference_images(options: StoryGenerationOptions) -> List[bytes]:
+    refs: List[bytes] = []
+
+    for img in options.reference_images:
+        try:
+            refs.append(bytes(img))
+        except Exception:
+            continue
+
+    for path_str in options.local_images:
+        if not isinstance(path_str, str) or not path_str:
+            continue
+        try:
+            data = Path(path_str).expanduser().read_bytes()
+        except Exception:
+            continue
+        refs.append(data)
+
+    for url in options.http_images:
+        if not isinstance(url, str) or not url:
+            continue
+        try:
+            req = Request(url, method="GET")
+            with urlopen(req) as resp:
+                data = resp.read()
+        except Exception:
+            continue
+        if isinstance(data, bytes):
+            refs.append(data)
+
+    return refs
+
+
 def generate_from_story(
     story: str,
     max_scenes: int | None = None,
     image_size: ImageAspectLiteral = "1024x576",
+    options: StoryGenerationOptions | None = None,
 ) -> Tuple[str, str, str, str]:
     """
     物語テキストからシーンを分割し、各シーンごとに画像と音声を生成する。
@@ -45,6 +95,7 @@ def generate_from_story(
             - 横長: "1024x576", "1920x1080"
             - 縦長: "576x1024", "1080x1920"
             - 正方形: "1024x1024"
+        options: 追加の生成オプション（参照画像など）。
     Returns:
         (先頭シーンの生成プロンプト, 先頭シーンの画像URL, 先頭シーンの音声URL, 単一の動画URL)
     備考:
@@ -57,6 +108,8 @@ def generate_from_story(
     s = get_settings()
     # 日本語コメント: デフォルトは 1024x576
     eff_img_size = image_size
+    opts = options or StoryGenerationOptions()
+    base_reference_images = _collect_reference_images(opts)
 
     # シーン分割
     eff_max = max_scenes if max_scenes is not None else 9999
@@ -105,11 +158,11 @@ def generate_from_story(
         for attempt in range(1, 3 + 1):
             try:
                 # 日本語コメント: 参照画像（最大5枚）で一貫性を補助 + 指定の縦横比で生成
-                ref_images = images[-5:]
                 image_bytes = generate_image(
                     prompt,
                     size=eff_img_size,
-                    images=ref_images if ref_images else None,
+                    base_images=base_reference_images,
+                    scene_images=images[-5:],
                 )
                 break
             except Exception:  # ネットワークやAPIの一過性の失敗に対応

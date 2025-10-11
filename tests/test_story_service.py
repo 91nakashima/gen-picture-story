@@ -6,7 +6,9 @@ from urllib.parse import urlparse, unquote
 
 import pytest
 
-from app.services.story_service import generate_from_story
+from app.services.story_service import StoryGenerationOptions, generate_from_story
+from app.pipelines.compose_video import SceneMedia
+from app.services.llm_service import SceneSpec
 
 
 def require_openai_key() -> None:
@@ -81,3 +83,120 @@ def test_generate_from_story_local_outputs(monkeypatch: pytest.MonkeyPatch) -> N
     # 日本語コメント: 生成された動画の物理ファイルが存在することを確認
     vid_path = _path_from_file_url(vid_url)
     assert vid_path.is_file()
+
+
+def test_generate_from_story_reference_images(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+) -> None:
+    """参照画像が generate_image に渡されることを確認する。"""
+
+    from app.services import story_service as ss
+
+    scenes: list[SceneSpec] = [
+        {
+            "text": "シーン1",
+            "image_hint": "",
+            "voice_hint": "",
+            "voice_script": "",
+            "sfx_hint": "",
+        },
+        {
+            "text": "シーン2",
+            "image_hint": "",
+            "voice_hint": "",
+            "voice_script": "",
+            "sfx_hint": "",
+        },
+    ]
+
+    def _fake_split_scenes(_story: str, _max: int | None) -> list[SceneSpec]:
+        return scenes
+
+    def _fake_decide_style_hint(_story: str) -> str:
+        return "スタイル"
+
+    def _fake_build_image_prompt(_text: str, style_hint: str | None = None) -> str:
+        return f"prompt:{style_hint}"
+
+    def _fake_build_voice_script(_text: str, _hint: str | None = None) -> str:
+        return "voice"
+
+    monkeypatch.setattr(ss, "split_scenes", _fake_split_scenes)
+    monkeypatch.setattr(ss, "decide_style_hint", _fake_decide_style_hint)
+    monkeypatch.setattr(ss, "build_image_prompt", _fake_build_image_prompt)
+    monkeypatch.setattr(ss, "build_voice_script", _fake_build_voice_script)
+
+    captured_images: list[tuple[list[bytes] | None, list[bytes] | None]] = []
+
+    generated_payloads: list[bytes] = []
+
+    def _fake_generate_image(
+        prompt: str,
+        size: str | None = None,
+        base_images: list[bytes] | None = None,
+        scene_images: list[bytes] | None = None,
+    ) -> bytes:
+        captured_images.append(
+            (
+                list(base_images) if base_images is not None else None,
+                list(scene_images) if scene_images is not None else None,
+            )
+        )
+        payload = b"image" + bytes([len(generated_payloads)])
+        generated_payloads.append(payload)
+        return payload
+
+    monkeypatch.setattr(ss, "generate_image", _fake_generate_image)
+
+    def _fake_generate_tts(_text: str, voice: str | None = None, fmt: str = "mp3") -> bytes:
+        return b"audio"
+
+    monkeypatch.setattr(ss, "generate_tts", _fake_generate_tts)
+
+    def _fake_compose_scene_video(_media: SceneMedia) -> dict[str, str]:
+        return {"video_url": "file://video", "video_path": "/tmp/video.mp4", "video_gcs": ""}
+
+    monkeypatch.setattr(ss, "compose_scene_video", _fake_compose_scene_video)
+
+    local_file = tmp_path / "ref_local.png"
+    local_file.write_bytes(b"local-bytes")
+
+    class _DummyResponse:
+        def __init__(self, data: bytes) -> None:
+            self._data = data
+
+        def read(self) -> bytes:
+            return self._data
+
+        def __enter__(self) -> "_DummyResponse":
+            return self
+
+        def __exit__(self, exc_type, exc_val, exc_tb) -> bool:
+            return False
+
+    def _fake_urlopen(_req: object) -> _DummyResponse:  # type: ignore[override]
+        return _DummyResponse(b"http-bytes")
+
+    monkeypatch.setattr(ss, "urlopen", _fake_urlopen)
+
+    options = StoryGenerationOptions(
+        reference_images=(b"ref-a",),
+        local_images=(str(local_file),),
+        http_images=("https://example.com/ref.png",),
+    )
+    result = generate_from_story(
+        "テスト物語",
+        max_scenes=1,
+        image_size="1024x576",
+        options=options,
+    )
+
+    assert result[0] != ""
+    assert len(captured_images) == 2
+    assert len(generated_payloads) == 2
+    first_base, first_scene = captured_images[0]
+    second_base, second_scene = captured_images[1]
+    assert first_base == [b"ref-a", b"local-bytes", b"http-bytes"]
+    assert first_scene == []
+    assert second_base == [b"ref-a", b"local-bytes", b"http-bytes"]
+    assert second_scene == [generated_payloads[0]]
